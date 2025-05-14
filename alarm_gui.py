@@ -4,6 +4,7 @@ import threading
 import time
 from plyer import notification
 import pygame
+import datetime
 
 ALARM_TITLE = "알람"
 ALARM_MESSAGE = "일어날 시간입니다!"
@@ -23,7 +24,7 @@ STATUS_ON = "#FFD600"
 STATUS_OFF = "#888"
 
 class FlapCard(tk.Canvas):
-    def __init__(self, master, digit="00", font_size=90, alert=False, **kwargs):
+    def __init__(self, master, digit="00", font_size=70, alert=False, **kwargs):
         super().__init__(master, width=120, height=160, bg=BG_COLOR, highlightthickness=0, **kwargs)
         self.font = self._get_font(font_size)
         self.digit = digit
@@ -107,7 +108,7 @@ class AlarmApp:
         self.update_timer_job = None
         self.is_alert = False
         self.root.configure(bg=BG_COLOR)
-        self.root.geometry("500x350")
+        self.root.geometry("500x370")
         self.root.minsize(400, 300)
 
         # 상태 표시
@@ -117,6 +118,10 @@ class AlarmApp:
         # 플랩시계 타이머
         self.flap_clock = FlapClock(root)
         self.flap_clock.pack(pady=5)
+
+        # 다음 알람 시각 표시
+        self.next_alarm_label = tk.Label(root, text="", font=("맑은 고딕", 14), bg=BG_COLOR, fg="#BBB")
+        self.next_alarm_label.pack(pady=(0, 10))
 
         # 버튼
         self.toggle_btn = tk.Button(root, text="알람 시작", font=("맑은 고딕", 16, "bold"), width=16, height=2,
@@ -131,7 +136,6 @@ class AlarmApp:
             self.is_running = True
             self.status_label.config(text="알람 상태: ON", fg=STATUS_ON)
             self.toggle_btn.config(text="알람 정지")
-            self.remaining_time = 30 * 60  # 30분
             self.is_alert = False
             self.update_timer()
             self.alarm_thread = threading.Thread(target=self.run_alarm, daemon=True)
@@ -146,37 +150,44 @@ class AlarmApp:
 
     def update_timer(self):
         if self.is_running:
-            mins, secs = divmod(self.remaining_time, 60)
-            self.flap_clock.set_time(mins, secs, alert=self.is_alert)
-            if self.remaining_time > 0:
-                self.remaining_time -= 1
-                self.update_timer_job = self.root.after(1000, self.update_timer)
+            now = datetime.datetime.now()
+            mins = now.minute
+            secs = now.second
+            # 다음 알람까지 남은 시간 계산
+            if mins < 30:
+                next_alarm_min = 30
             else:
-                self.is_alert = True
-                self.flap_clock.set_time(0, 0, alert=True)
+                next_alarm_min = 60
+            remain_min = next_alarm_min - mins - (1 if secs > 0 else 0)
+            remain_sec = 60 - secs if secs > 0 else 0
+            if remain_sec == 60:
+                remain_sec = 0
+            self.flap_clock.set_time(remain_min, remain_sec, alert=self.is_alert)
+            # 다음 알람 시각 표시
+            next_hour = now.hour
+            next_min = next_alarm_min
+            if next_min == 60:
+                next_min = 0
+                next_hour = (next_hour + 1) % 24
+            self.next_alarm_label.config(text=f"다음 알람: {next_hour:02d}:{next_min:02d}")
+            self.update_timer_job = self.root.after(1000, self.update_timer)
 
     def run_alarm(self):
+        last_alarm_minute = None
         while self.is_running:
-            # 30분 대기
-            for _ in range(30 * 60):
-                if not self.is_running:
-                    return
-                time.sleep(1)
-            if not self.is_running:
-                return
-            self.root.after(0, lambda: self.flap_clock.set_time(0, 0, alert=True))
-            self.show_alarm_popup_once()
-            # 1분 동안 소리 반복 (팝업은 1회만)
-            start_time = time.time()
-            while time.time() - start_time < 60:
-                if not self.is_running:
-                    return
-                self.play_alarm_sound()
-            # 다음 30분 타이머 재설정
-            if self.is_running:
-                self.remaining_time = 30 * 60
-                self.is_alert = False
-                self.root.after(0, self.update_timer)
+            now = datetime.datetime.now()
+            # 정각 또는 30분(00, 30)에만 알람
+            if (now.minute == 0 or now.minute == 30) and now.second == 0:
+                if last_alarm_minute != now.minute:
+                    self.root.after(0, lambda: self.flap_clock.set_time(0, 0, alert=True))
+                    self.show_alarm_popup_once()
+                    start_time = time.time()
+                    while time.time() - start_time < 60:
+                        if not self.is_running:
+                            return
+                        self.play_alarm_sound()
+                    last_alarm_minute = now.minute
+            time.sleep(1)
 
     def show_alarm_popup_once(self):
         try:
