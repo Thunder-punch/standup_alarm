@@ -5,10 +5,18 @@ import time
 from plyer import notification
 import pygame
 import datetime
+from tkinter import messagebox
+import sys
+import os
+
+def resource_path(relative_path):
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
 
 ALARM_TITLE = "알람"
 ALARM_MESSAGE = "일어날 시간입니다!"
-SOUND_PATH = "alarm_sound.mp3"
+SOUND_PATH = resource_path("alarm_sound.mp3")
 
 # 플랩시계 스타일 색상/폰트
 BG_COLOR = "#181A1B"
@@ -190,6 +198,7 @@ class AlarmApp:
             time.sleep(1)
 
     def show_alarm_popup_once(self):
+        # 윈도우 알림
         try:
             notification.notify(
                 title=ALARM_TITLE,
@@ -198,6 +207,12 @@ class AlarmApp:
             )
         except Exception as e:
             print(f"팝업 알림 오류: {e}")
+
+        # Tkinter 메시지박스(안내창)
+        try:
+            self.root.after(0, lambda: messagebox.showinfo(ALARM_TITLE, ALARM_MESSAGE))
+        except Exception as e:
+            print(f"메시지박스 오류: {e}")
 
     def play_alarm_sound(self):
         try:
